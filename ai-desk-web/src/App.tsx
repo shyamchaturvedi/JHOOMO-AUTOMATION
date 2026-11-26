@@ -23,7 +23,9 @@ import {
   Bot,
   CheckCircle2,
   Copy,
+  FileText,
   Instagram,
+  LayoutDashboard,
   LogOut,
   MessageCircle,
   MessageSquare,
@@ -37,6 +39,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { auth, db, googleProvider } from './lib/firebase';
+import LeadFormsTab from './components/LeadFormsTab';
+import DashboardTab from './components/DashboardTab';
 import {
   dispatchCampaign,
   fetchWorkerHealth,
@@ -50,7 +54,7 @@ import {
 
 type ChannelType = 'all' | 'app' | 'whatsapp' | 'instagram' | 'facebook';
 type TicketStatus = 'open' | 'in_progress' | 'solved' | 'closed';
-type ActiveTab = 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'channels';
+type ActiveTab = 'dashboard' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels';
 
 interface TicketMessage {
   senderId?: string;
@@ -693,10 +697,12 @@ export default function App() {
           <nav style={{ display: 'flex', gap: 4 }}>
             {(
               [
+                { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
                 { id: 'omnibox', label: 'Unified Omnibox', icon: MessageSquare },
                 { id: 'jarvis', label: 'JARVIS Brain', icon: Bot },
                 { id: 'social', label: 'AI Social Auto-Pilot', icon: Share2 },
                 { id: 'campaigns', label: 'SMS & WA Campaigns', icon: Send },
+                { id: 'forms', label: 'Lead Forms', icon: FileText },
                 { id: 'channels', label: 'Channels & Webhooks', icon: Radio },
               ] as const
             ).map((tab) => {
@@ -766,6 +772,8 @@ export default function App() {
       </header>
 
       {/* Main Content */}
+      {activeTab === 'dashboard' && <DashboardTab />}
+
       {activeTab === 'omnibox' && (
         <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr 300px', flex: 1, minHeight: 0 }}>
           {/* LEFT PANE: Ticket & Channel Queue */}
@@ -1757,6 +1765,8 @@ export default function App() {
           )}
         </div>
       )}
+
+      {activeTab === 'forms' && <LeadFormsTab />}
 
       {activeTab === 'channels' && (
         <div style={{ flex: 1, overflowY: 'auto', padding: 28, maxWidth: 920, width: '100%', margin: '0 auto' }}>
