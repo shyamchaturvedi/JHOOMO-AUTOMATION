@@ -23,6 +23,7 @@ import {
   Bot,
   CheckCircle2,
   Copy,
+  CreditCard,
   FileText,
   Film,
   Instagram,
@@ -34,6 +35,7 @@ import {
   Radio,
   Search,
   Send,
+  Settings,
   Share2,
   ShieldCheck,
   Sparkles,
@@ -47,6 +49,8 @@ import InstagramTab from './components/InstagramTab';
 import PostsReelsTab from './components/PostsReelsTab';
 import AutomationsTab from './components/AutomationsTab';
 import LinkInBioTab from './components/LinkInBioTab';
+import BillingTab from './components/BillingTab';
+import SettingsTab from './components/SettingsTab';
 import {
   dispatchCampaign,
   fetchWorkerHealth,
@@ -60,7 +64,7 @@ import {
 
 type ChannelType = 'all' | 'app' | 'whatsapp' | 'instagram' | 'facebook';
 type TicketStatus = 'open' | 'in_progress' | 'solved' | 'closed';
-type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'automations' | 'link-in-bio' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels';
+type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'automations' | 'link-in-bio' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels' | 'billing' | 'settings';
 
 interface TicketMessage {
   senderId?: string;
@@ -723,6 +727,8 @@ export default function App() {
                 { id: 'campaigns', label: 'SMS & WA Campaigns', icon: Send },
                 { id: 'forms', label: 'Lead Forms', icon: FileText },
                 { id: 'channels', label: 'Channels & Webhooks', icon: Radio },
+                { id: 'billing', label: 'Billing', icon: CreditCard },
+                { id: 'settings', label: 'Settings', icon: Settings },
               ] as const
             ).map((tab) => {
               const Icon = tab.icon;
@@ -1864,6 +1870,10 @@ export default function App() {
       )}
 
       {activeTab === 'forms' && <LeadFormsTab />}
+
+      {activeTab === 'billing' && <BillingTab />}
+
+      {activeTab === 'settings' && <SettingsTab />}
 
       {activeTab === 'channels' && (
         <div style={{ flex: 1, overflowY: 'auto', padding: 28, maxWidth: 920, width: '100%', margin: '0 auto' }}>
