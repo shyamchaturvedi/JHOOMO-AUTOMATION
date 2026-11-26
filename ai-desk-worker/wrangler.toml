@@ -1,0 +1,13 @@
+name = "jhoomo-ai-desk-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Daily Auto-Post Schedule (UTC):
+# 04:30 UTC = 10:00 AM IST | 13:30 UTC = 07:00 PM IST
+[triggers]
+crons = ["30 4 * * *", "30 13 * * *"]
+
+[vars]
+ALLOWED_ORIGIN = "*"
+META_VERIFY_TOKEN = "jhoomo_meta_verify_2026"
+FIREBASE_PROJECT_ID = "milo-da65c"
