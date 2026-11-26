@@ -66,6 +66,27 @@ type ChannelType = 'all' | 'app' | 'whatsapp' | 'instagram' | 'facebook';
 type TicketStatus = 'open' | 'in_progress' | 'solved' | 'closed';
 type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'automations' | 'link-in-bio' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels' | 'billing' | 'settings';
 
+const VALID_TABS: ActiveTab[] = [
+  'dashboard',
+  'instagram',
+  'posts',
+  'automations',
+  'link-in-bio',
+  'omnibox',
+  'jarvis',
+  'social',
+  'campaigns',
+  'forms',
+  'channels',
+  'billing',
+  'settings',
+];
+
+function getTabFromPath(): ActiveTab {
+  const seg = window.location.pathname.replace(/^\/+|\/+$/g, '').split('/')[0] as ActiveTab;
+  return VALID_TABS.includes(seg) ? seg : 'dashboard';
+}
+
 interface TicketMessage {
   senderId?: string;
   senderType?: string;
@@ -161,7 +182,21 @@ const QUICK_MACROS = [
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('omnibox');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(getTabFromPath);
+
+  const navigateTab = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    const nextPath = `/${tab}`;
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+  };
+
+  useEffect(() => {
+    const onPopState = () => setActiveTab(getTabFromPath());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   // Omnibox state
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -736,7 +771,7 @@ export default function App() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => navigateTab(tab.id)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
