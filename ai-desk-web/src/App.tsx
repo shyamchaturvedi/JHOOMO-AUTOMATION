@@ -20,6 +20,9 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import {
+  AlignLeft,
+  AlertTriangle,
+  Bell,
   Bot,
   CheckCircle2,
   Copy,
@@ -184,6 +187,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>(getTabFromPath);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   const navigateTab = (tab: ActiveTab) => {
     setActiveTab(tab);
@@ -882,21 +886,135 @@ export default function App() {
             <span>JHOOMO AI DESK • Automation &amp; Support</span>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '3px 9px',
-              borderRadius: 999,
-              background: 'rgba(16, 185, 129, 0.12)',
-              border: '1px solid rgba(16, 185, 129, 0.25)',
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#34d399',
-            }}
-          >
-            <Zap size={11} /> Gemini Flash Live
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
+            {/* Admin Action Needed Red Alert Bell */}
+            {(() => {
+              const adminAlerts = tickets.filter(
+                (t) =>
+                  t.status === 'open' &&
+                  (t.priority === 'HIGH' ||
+                    /refund|upi|payment|fraud|cancel|urgent/i.test(`${t.subject} ${t.description}`))
+              );
+              return (
+                <>
+                  <button
+                    onClick={() => setNotifOpen((prev) => !prev)}
+                    title="Admin Action Alerts"
+                    style={{
+                      position: 'relative',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '4px 10px',
+                      borderRadius: 999,
+                      border:
+                        adminAlerts.length > 0
+                          ? '1px solid rgba(239, 68, 68, 0.5)'
+                          : '1px solid rgba(255,255,255,0.1)',
+                      background:
+                        adminAlerts.length > 0
+                          ? 'rgba(239, 68, 68, 0.16)'
+                          : 'rgba(255,255,255,0.03)',
+                      color: adminAlerts.length > 0 ? '#f87171' : 'var(--text-muted)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Bell size={12} />
+                    {adminAlerts.length > 0 ? (
+                      <span>ACTION NEEDED ({adminAlerts.length})</span>
+                    ) : (
+                      <span>All Clear</span>
+                    )}
+                  </button>
+
+                  {notifOpen && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 36,
+                        right: 0,
+                        width: 320,
+                        background: '#11151f',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        borderRadius: 12,
+                        padding: 12,
+                        boxShadow: '0 16px 40px rgba(0,0,0,0.55)',
+                        zIndex: 50,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: adminAlerts.length > 0 ? '#f87171' : '#34d399',
+                          marginBottom: 10,
+                        }}
+                      >
+                        <AlertTriangle size={14} />
+                        {adminAlerts.length > 0
+                          ? `Admin Action Needed (${adminAlerts.length})`
+                          : 'AI Handling Everything — No Admin Action Needed'}
+                      </div>
+                      {adminAlerts.length === 0 ? (
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '6px 0' }}>
+                          Autonomous AI is resolving all routine tickets &amp; emails.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
+                          {adminAlerts.map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => {
+                                navigateTab('omnibox');
+                                setNotifOpen(false);
+                              }}
+                              style={{
+                                textAlign: 'left',
+                                padding: 10,
+                                borderRadius: 9,
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                color: '#fff',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#fca5a5' }}>
+                                {formatTicketNo(t.id)} · {t.subject}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {t.userName} · Escalated for Admin Review
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '3px 9px',
+                borderRadius: 999,
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                fontSize: 11,
+                fontWeight: 700,
+                color: '#34d399',
+              }}
+            >
+              <Zap size={11} /> Gemini Flash Live
+            </div>
           </div>
         </div>
 
