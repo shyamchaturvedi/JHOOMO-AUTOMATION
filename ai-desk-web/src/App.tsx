@@ -27,6 +27,7 @@ import {
   Film,
   Instagram,
   LayoutDashboard,
+  Link2,
   LogOut,
   MessageCircle,
   MessageSquare,
@@ -44,6 +45,8 @@ import LeadFormsTab from './components/LeadFormsTab';
 import DashboardTab from './components/DashboardTab';
 import InstagramTab from './components/InstagramTab';
 import PostsReelsTab from './components/PostsReelsTab';
+import AutomationsTab from './components/AutomationsTab';
+import LinkInBioTab from './components/LinkInBioTab';
 import {
   dispatchCampaign,
   fetchWorkerHealth,
@@ -57,7 +60,7 @@ import {
 
 type ChannelType = 'all' | 'app' | 'whatsapp' | 'instagram' | 'facebook';
 type TicketStatus = 'open' | 'in_progress' | 'solved' | 'closed';
-type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels';
+type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'automations' | 'link-in-bio' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels';
 
 interface TicketMessage {
   senderId?: string;
@@ -712,6 +715,8 @@ export default function App() {
                 { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
                 { id: 'instagram', label: 'Instagram', icon: Instagram },
                 { id: 'posts', label: 'Posts & Reels', icon: Film },
+                { id: 'automations', label: 'Automations', icon: Zap },
+                { id: 'link-in-bio', label: 'Link in Bio', icon: Link2 },
                 { id: 'omnibox', label: 'Unified Omnibox', icon: MessageSquare },
                 { id: 'jarvis', label: 'JARVIS Brain', icon: Bot },
                 { id: 'social', label: 'AI Social Auto-Pilot', icon: Share2 },
@@ -861,6 +866,10 @@ export default function App() {
       {activeTab === 'instagram' && <InstagramTab />}
 
       {activeTab === 'posts' && <PostsReelsTab />}
+
+      {activeTab === 'automations' && <AutomationsTab />}
+
+      {activeTab === 'link-in-bio' && <LinkInBioTab />}
 
       {activeTab === 'omnibox' && (
         <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr 300px', flex: 1, minHeight: 0 }}>
