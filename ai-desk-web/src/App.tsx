@@ -30,6 +30,7 @@ import {
   LayoutDashboard,
   Link2,
   LogOut,
+  Mail,
   MessageCircle,
   MessageSquare,
   Radio,
@@ -49,6 +50,7 @@ import InstagramTab from './components/InstagramTab';
 import PostsReelsTab from './components/PostsReelsTab';
 import AutomationsTab from './components/AutomationsTab';
 import LinkInBioTab from './components/LinkInBioTab';
+import SupportMailTab from './components/SupportMailTab';
 import SettingsTab from './components/SettingsTab';
 import {
   dispatchCampaign,
@@ -63,7 +65,7 @@ import {
 
 type ChannelType = 'all' | 'app' | 'whatsapp' | 'instagram' | 'facebook';
 type TicketStatus = 'open' | 'in_progress' | 'solved' | 'closed';
-type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'automations' | 'link-in-bio' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels' | 'settings';
+type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'automations' | 'link-in-bio' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'mail' | 'channels' | 'settings';
 
 const VALID_TABS: ActiveTab[] = [
   'dashboard',
@@ -76,6 +78,7 @@ const VALID_TABS: ActiveTab[] = [
   'social',
   'campaigns',
   'forms',
+  'mail',
   'channels',
   'settings',
 ];
@@ -759,6 +762,7 @@ export default function App() {
                 { id: 'social', label: 'AI Social Auto-Pilot', icon: Share2 },
                 { id: 'campaigns', label: 'SMS & WA Campaigns', icon: Send },
                 { id: 'forms', label: 'Lead Forms', icon: FileText },
+                { id: 'mail', label: 'Support Mail', icon: Mail },
                 { id: 'channels', label: 'Channels & Webhooks', icon: Radio },
                 { id: 'settings', label: 'Settings', icon: Settings },
               ] as const
@@ -1901,6 +1905,8 @@ export default function App() {
       )}
 
       {activeTab === 'forms' && <LeadFormsTab />}
+
+      {activeTab === 'mail' && <SupportMailTab />}
 
       {activeTab === 'settings' && <SettingsTab />}
 

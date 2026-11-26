@@ -1,6 +1,7 @@
 export interface Env {
   GEMINI_API_KEY: string;
   META_VERIFY_TOKEN: string;
+  RESEND_API_KEY?: string;
   FIREBASE_PROJECT_ID?: string;
   META_PAGE_TOKEN?: string;
   META_PAGE_ID?: string;
@@ -556,6 +557,59 @@ Return JSON only with keys: caption, hashtags (array of strings), commentAutoRep
         return json({ ok: true, result }, 200, origin);
       } catch (err) {
         return json({ error: (err as Error).message }, 500, origin);
+      }
+    }
+
+    // 5a. Send Support Email via Resend (JHOOMO Branded Template)
+    if (url.pathname === '/api/email/send' && request.method === 'POST') {
+      try {
+        const body = (await request.json()) as {
+          sender?: string;
+          to?: string;
+          subject?: string;
+          body?: string;
+        };
+        if (!body.to || !body.subject || !body.body) {
+          return json({ error: 'Missing required fields: to, subject, body' }, 400, origin);
+        }
+
+        const SENDER_MAP: Record<string, { from: string; senderTitle: string }> = {
+          'tickets@jhoomo.in': { from: 'JHOOMO <tickets@jhoomo.in>', senderTitle: 'JHOOMO Ticket Services' },
+          'organizer@jhoomo.in': { from: 'JHOOMO Organizer Relations <organizer@jhoomo.in>', senderTitle: 'JHOOMO Organizer Services' },
+          'careers@jhoomo.in': { from: 'JHOOMO Careers <careers@jhoomo.in>', senderTitle: 'JHOOMO People Team' },
+          'support@jhoomo.in': { from: 'JHOOMO Helpdesk <support@jhoomo.in>', senderTitle: 'JHOOMO Customer Support' },
+          'admin@jhoomo.in': { from: 'JHOOMO <admin@jhoomo.in>', senderTitle: 'JHOOMO Corporate Office' },
+        };
+        const currentSender = SENDER_MAP[body.sender || 'support@jhoomo.in'] || SENDER_MAP['support@jhoomo.in'];
+        const formattedContent = String(body.body)
+          .split('\n\n')
+          .map((p) => `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:#333333;">${p.replace(/\n/g, '<br/>')}</p>`)
+          .join('');
+
+        const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#F4F4F6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="padding:30px 10px;"><tr><td align="center"><table width="600" style="max-width:600px;width:100%;background:#FFFFFF;border-radius:8px;border:1px solid #E5E7EB;overflow:hidden;"><tr><td height="4" style="background:#E11D48;"></td></tr><tr><td style="padding:24px 32px;border-bottom:1px solid #F3F4F6;"><strong style="font-size:20px;color:#111827;">JHOOMO</strong> <span style="float:right;font-size:13px;color:#6B7280;">${currentSender.senderTitle}</span></td></tr><tr><td style="padding:32px;">${formattedContent}</td></tr></table></td></tr></table></body></html>`;
+
+        const resendKey = env.RESEND_API_KEY;
+        if (!resendKey) {
+          return json({ ok: false, error: 'RESEND_API_KEY not configured' }, 400, origin);
+        }
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: currentSender.from,
+            to: [body.to],
+            subject: body.subject,
+            html,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) return json({ ok: false, error: data }, res.status, origin);
+        return json({ ok: true, data }, 200, origin);
+      } catch (err) {
+        return json({ ok: false, error: (err as Error).message }, 500, origin);
       }
     }
 

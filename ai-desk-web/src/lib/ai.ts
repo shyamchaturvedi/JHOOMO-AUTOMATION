@@ -215,6 +215,29 @@ export interface InstagramOverview {
   media: InstagramMediaItem[];
 }
 
+export async function sendSupportEmail(params: {
+  sender: string;
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (!WORKER_URL) return { ok: false, error: 'VITE_WORKER_URL not configured' };
+  try {
+    const res = await fetch(`${WORKER_URL}/api/email/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: unknown };
+    if (!res.ok || !data.ok) {
+      return { ok: false, error: typeof data.error === 'string' ? data.error : 'Failed to send email' };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
 export async function fetchInstagramOverview(): Promise<InstagramOverview | null> {
   if (!WORKER_URL) return null;
   try {
