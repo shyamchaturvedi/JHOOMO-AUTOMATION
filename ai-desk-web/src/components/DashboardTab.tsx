@@ -14,6 +14,23 @@ import { fetchInstagramOverview, InstagramOverview } from '../lib/ai';
 
 export default function DashboardTab() {
   const [igData, setIgData] = useState<InstagramOverview | null>(null);
+  const [automationEnabled, setAutomationEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('jhoomo_automation_enabled') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleAutomation = () => {
+    setAutomationEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('jhoomo_automation_enabled', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     fetchInstagramOverview().then((res) => {
@@ -35,6 +52,110 @@ export default function DashboardTab() {
         <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--text-muted)' }}>
           Welcome back! Here&apos;s your overview.
         </p>
+      </div>
+
+      {/* Master Automation ON/OFF Toggle */}
+      <div
+        style={{
+          background: automationEnabled
+            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(99, 102, 241, 0.08))'
+            : 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(148, 163, 184, 0.06))',
+          border: automationEnabled
+            ? '1px solid rgba(16, 185, 129, 0.35)'
+            : '1px solid rgba(239, 68, 68, 0.3)',
+          borderRadius: 16,
+          padding: '20px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 16,
+          marginBottom: 20,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 12,
+              background: automationEnabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.18)',
+              color: automationEnabled ? '#34d399' : '#f87171',
+              display: 'grid',
+              placeItems: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Zap size={22} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 16.5, fontWeight: 800 }}>Automation Engine</span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: '3px 9px',
+                  borderRadius: 999,
+                  background: automationEnabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                  color: automationEnabled ? '#34d399' : '#f87171',
+                }}
+              >
+                {automationEnabled ? 'ON · LIVE' : 'OFF · PAUSED'}
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+              {automationEnabled
+                ? 'Comment-to-DM, AI auto-replies, and scheduled social posts are active.'
+                : 'All automated replies and scheduled triggers are currently paused.'}
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={toggleAutomation}
+          aria-pressed={automationEnabled}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '10px 18px',
+            borderRadius: 999,
+            border: 'none',
+            background: automationEnabled ? '#10b981' : '#334155',
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 800,
+            cursor: 'pointer',
+            boxShadow: automationEnabled ? '0 0 24px rgba(16, 185, 129, 0.35)' : 'none',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <span
+            style={{
+              width: 38,
+              height: 22,
+              borderRadius: 999,
+              background: 'rgba(0,0,0,0.28)',
+              position: 'relative',
+              display: 'inline-block',
+            }}
+          >
+            <span
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                background: '#fff',
+                position: 'absolute',
+                top: 3,
+                left: automationEnabled ? 19 : 3,
+                transition: 'left 0.2s ease',
+              }}
+            />
+          </span>
+          {automationEnabled ? 'TURN OFF' : 'TURN ON'}
+        </button>
       </div>
 
       {/* Instagram Connection Status Card */}
