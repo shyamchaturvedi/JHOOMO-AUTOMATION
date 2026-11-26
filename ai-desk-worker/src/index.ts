@@ -40,27 +40,35 @@ function json(data: unknown, status = 200, origin = '*') {
 }
 
 async function callGemini(apiKey: string, prompt: string): Promise<string> {
-  const res = await fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${JHOOMO_SYSTEM_PROMPT}\n\n${prompt}` }] }],
-      }),
+  const models = ['gemini-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastError = 'Gemini request failed';
+
+  for (const model of models) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${JHOOMO_SYSTEM_PROMPT}\n\n${prompt}` }] }],
+        }),
+      }
+    );
+    if (res.ok) {
+      const data = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     }
-  );
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini error ${res.status}: ${errText}`);
+    lastError = `Gemini error ${res.status}: ${await res.text()}`;
+    if (res.status !== 503 && res.status !== 429) {
+      throw new Error(lastError);
+    }
   }
-  const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  throw new Error(lastError);
 }
 
 function normalizePhone(raw?: string): string {
