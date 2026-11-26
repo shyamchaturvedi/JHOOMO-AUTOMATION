@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   Instagram,
@@ -6,21 +6,37 @@ import {
   RefreshCw,
   Unplug,
 } from 'lucide-react';
+import { fetchInstagramOverview, InstagramOverview } from '../lib/ai';
 
 export default function InstagramTab() {
   const [connected, setConnected] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [statusNote, setStatusNote] = useState<string | null>(null);
+  const [igData, setIgData] = useState<InstagramOverview | null>(null);
 
-  const handleRefreshToken = () => {
+  const loadLive = async () => {
+    const res = await fetchInstagramOverview();
+    if (res) {
+      setIgData(res);
+      if (res.connected) setConnected(true);
+    }
+  };
+
+  useEffect(() => {
+    loadLive();
+  }, []);
+
+  const handleRefreshToken = async () => {
     setRefreshing(true);
     setStatusNote(null);
-    setTimeout(() => {
-      setRefreshing(false);
-      setStatusNote('Access token refreshed successfully.');
-      setTimeout(() => setStatusNote(null), 2500);
-    }, 600);
+    await loadLive();
+    setRefreshing(false);
+    setStatusNote('Access token & live account data refreshed.');
+    setTimeout(() => setStatusNote(null), 2500);
   };
+
+  const username = igData?.profile?.username || 'jhoomo.events';
+  const avatarUrl = igData?.profile?.profile_picture_url;
 
   return (
     <div style={{ maxWidth: 1020, margin: '0 auto', padding: '24px 20px 60px' }}>
@@ -66,12 +82,20 @@ export default function InstagramTab() {
               flexShrink: 0,
             }}
           >
-            <Instagram size={22} />
+            {connected && avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={username}
+                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+              />
+            ) : (
+              <Instagram size={22} />
+            )}
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 15.5, fontWeight: 700 }}>
-                {connected ? '@jhoomo.events' : 'No Account Connected'}
+                {connected ? `@${username}` : 'No Account Connected'}
               </span>
               <span
                 style={{

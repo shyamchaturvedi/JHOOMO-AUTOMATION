@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ExternalLink,
   Film,
+  Heart,
   Image as ImageIcon,
   Layers,
+  MessageCircle,
   RefreshCw,
   Search,
   Sparkles,
 } from 'lucide-react';
+import { fetchInstagramOverview, InstagramMediaItem } from '../lib/ai';
 
 type MediaFilter = 'all' | 'image' | 'carousel' | 'reel' | 'story';
 
@@ -15,16 +19,40 @@ export default function PostsReelsTab() {
   const [appliedSearch, setAppliedSearch] = useState('');
   const [filter, setFilter] = useState<MediaFilter>('all');
   const [loading, setLoading] = useState(false);
+  const [media, setMedia] = useState<InstagramMediaItem[]>([]);
+
+  const loadMedia = async () => {
+    setLoading(true);
+    const res = await fetchInstagramOverview();
+    if (res?.media) {
+      setMedia(res.media);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadMedia();
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setAppliedSearch(searchInput.trim());
+    setAppliedSearch(searchInput.trim().toLowerCase());
   };
 
   const handleRefresh = () => {
-    setLoading(true);
-    setTimeout(() => setLoading(false), 700);
+    loadMedia();
   };
+
+  const filteredMedia = media.filter((item) => {
+    const matchesSearch =
+      !appliedSearch || (item.caption || '').toLowerCase().includes(appliedSearch);
+    if (!matchesSearch) return false;
+    if (filter === 'all') return true;
+    if (filter === 'image') return item.media_type === 'IMAGE';
+    if (filter === 'carousel') return item.media_type === 'CAROUSEL_ALBUM';
+    if (filter === 'reel') return item.media_type === 'VIDEO';
+    return true;
+  });
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: '24px 20px 60px' }}>
@@ -177,6 +205,97 @@ export default function PostsReelsTab() {
         {loading ? (
           <div style={{ color: 'var(--text-muted)', fontSize: 14, fontWeight: 600 }}>
             Fetching posts &amp; stories...
+          </div>
+        ) : filteredMedia.length > 0 ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: 14,
+              textAlign: 'left',
+            }}
+          >
+            {filteredMedia.map((item) => {
+              const thumb = item.thumbnail_url || item.media_url;
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    background: 'var(--bg)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt={item.caption || 'Instagram post'}
+                      style={{ width: '100%', height: 180, objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        height: 180,
+                        display: 'grid',
+                        placeItems: 'center',
+                        background: 'var(--surface)',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      <Film size={24} />
+                    </div>
+                  )}
+                  <div style={{ padding: 12 }}>
+                    <div
+                      style={{
+                        fontSize: 12.5,
+                        color: 'var(--text)',
+                        lineHeight: 1.4,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        marginBottom: 10,
+                      }}
+                    >
+                      {item.caption || 'No caption'}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: 12,
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <Heart size={12} /> {item.like_count ?? 0}
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <MessageCircle size={12} /> {item.comments_count ?? 0}
+                        </span>
+                      </div>
+                      {item.permalink && (
+                        <a
+                          href={item.permalink}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: '#a5b4fc', display: 'inline-flex', alignItems: 'center' }}
+                        >
+                          <ExternalLink size={13} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <>

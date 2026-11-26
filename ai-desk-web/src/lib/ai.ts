@@ -190,6 +190,42 @@ export async function dispatchCampaign(params: {
   return (await res.json()) as Record<string, unknown>;
 }
 
+export interface InstagramMediaItem {
+  id: string;
+  caption?: string;
+  like_count?: number;
+  comments_count?: number;
+  timestamp?: string;
+  media_type?: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM' | string;
+  media_url?: string;
+  thumbnail_url?: string;
+  permalink?: string;
+}
+
+export interface InstagramOverview {
+  connected: boolean;
+  reason?: string;
+  profile: {
+    username?: string;
+    name?: string;
+    profile_picture_url?: string;
+    followers_count?: number;
+    media_count?: number;
+  } | null;
+  media: InstagramMediaItem[];
+}
+
+export async function fetchInstagramOverview(): Promise<InstagramOverview | null> {
+  if (!WORKER_URL) return null;
+  try {
+    const res = await fetch(`${WORKER_URL}/api/instagram/overview`);
+    if (!res.ok) return null;
+    return (await res.json()) as InstagramOverview;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchWorkerHealth(): Promise<{
   ok: boolean;
   cron?: string[];

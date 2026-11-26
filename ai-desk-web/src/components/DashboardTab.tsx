@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -10,8 +10,21 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
+import { fetchInstagramOverview, InstagramOverview } from '../lib/ai';
 
 export default function DashboardTab() {
+  const [igData, setIgData] = useState<InstagramOverview | null>(null);
+
+  useEffect(() => {
+    fetchInstagramOverview().then((res) => {
+      if (res) setIgData(res);
+    });
+  }, []);
+
+  const username = igData?.profile?.username || 'jhoomo.events';
+  const avatarUrl = igData?.profile?.profile_picture_url;
+  const followersCount = igData?.profile?.followers_count;
+  const mediaCount = igData?.profile?.media_count;
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: '24px 20px 60px' }}>
       {/* Page Header */}
@@ -53,11 +66,19 @@ export default function DashboardTab() {
               flexShrink: 0,
             }}
           >
-            <Instagram size={20} />
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={username}
+                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+              />
+            ) : (
+              <Instagram size={20} />
+            )}
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 15, fontWeight: 700 }}>@jhoomo.events</span>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>@{username}</span>
               <span
                 style={{
                   display: 'inline-flex',
@@ -77,6 +98,8 @@ export default function DashboardTab() {
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
               Connected 11/26/2026
+              {typeof followersCount === 'number' && ` · ${followersCount.toLocaleString()} followers`}
+              {typeof mediaCount === 'number' && ` · ${mediaCount.toLocaleString()} posts`}
             </div>
           </div>
         </div>

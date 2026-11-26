@@ -488,6 +488,45 @@ Return JSON only with keys: caption, hashtags (array of strings), commentAutoRep
       }
     }
 
+    // 3b. Live Instagram Account & Media Overview
+    if (url.pathname === '/api/instagram/overview' && request.method === 'GET') {
+      if (!env.META_PAGE_TOKEN || !env.IG_USER_ID) {
+        return json(
+          {
+            connected: false,
+            reason: 'META_PAGE_TOKEN or IG_USER_ID not configured',
+            profile: null,
+            media: [],
+          },
+          200,
+          origin
+        );
+      }
+      try {
+        const [profileRes, mediaRes] = await Promise.all([
+          fetch(
+            `https://graph.facebook.com/v21.0/${env.IG_USER_ID}?fields=username,name,profile_picture_url,followers_count,media_count&access_token=${encodeURIComponent(env.META_PAGE_TOKEN)}`
+          ),
+          fetch(
+            `https://graph.facebook.com/v21.0/${env.IG_USER_ID}/media?fields=id,caption,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink&limit=24&access_token=${encodeURIComponent(env.META_PAGE_TOKEN)}`
+          ),
+        ]);
+        const profile = profileRes.ok ? await profileRes.json() : null;
+        const mediaJson = mediaRes.ok ? ((await mediaRes.json()) as { data?: unknown[] }) : { data: [] };
+        return json(
+          {
+            connected: Boolean(profile),
+            profile,
+            media: mediaJson.data || [],
+          },
+          200,
+          origin
+        );
+      } catch (err) {
+        return json({ connected: false, error: (err as Error).message, profile: null, media: [] }, 500, origin);
+      }
+    }
+
     // 4. Direct Publish to Facebook & Instagram
     if (url.pathname === '/api/social/publish' && request.method === 'POST') {
       try {
