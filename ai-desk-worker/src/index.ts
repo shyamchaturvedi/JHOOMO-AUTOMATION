@@ -41,7 +41,12 @@ function json(data: unknown, status = 200, origin = '*') {
 }
 
 async function callGemini(apiKey: string, prompt: string): Promise<string> {
-  const models = ['gemini-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  const models = [
+    'gemini-3.5-flash-lite',
+    'gemini-2.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-flash-latest',
+  ];
   let lastError = 'Gemini request failed';
 
   for (const model of models) {
@@ -65,7 +70,7 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
       return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     }
     lastError = `Gemini error ${res.status}: ${await res.text()}`;
-    if (res.status !== 503 && res.status !== 429) {
+    if (res.status === 401 || res.status === 403) {
       throw new Error(lastError);
     }
   }

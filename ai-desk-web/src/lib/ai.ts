@@ -8,30 +8,44 @@ Rules:
 3. Gate Entry: M-Ticket uses a dynamic 30-second rotating QR code inside the JHOOMO app (screenshots are invalid).
 4. Never invent booking IDs, refund approvals, or promises outside policy.`;
 
+const GEMINI_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-flash-latest',
+];
+
 async function callDirectGemini(prompt: string): Promise<string> {
   if (!GEMINI_API_KEY) {
     throw new Error('No Worker URL reachable and VITE_GEMINI_API_KEY is missing.');
   }
-  const res = await fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-goog-api-key': GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${JHOOMO_SYSTEM_PROMPT}\n\n${prompt}` }] }],
-      }),
+  let lastError = 'Gemini request failed';
+  for (const model of GEMINI_MODELS) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-goog-api-key': GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${JHOOMO_SYSTEM_PROMPT}\n\n${prompt}` }] }],
+        }),
+      }
+    );
+    if (res.ok) {
+      const data = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     }
-  );
-  if (!res.ok) {
-    throw new Error(`Gemini error ${res.status}`);
+    lastError = `Gemini error ${res.status}`;
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(lastError);
+    }
   }
-  const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  throw new Error(lastError);
 }
 
 export async function generateAiDraft(params: {
