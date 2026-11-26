@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   Copy,
   FileText,
+  Film,
   Instagram,
   LayoutDashboard,
   LogOut,
@@ -42,6 +43,7 @@ import { auth, db, googleProvider } from './lib/firebase';
 import LeadFormsTab from './components/LeadFormsTab';
 import DashboardTab from './components/DashboardTab';
 import InstagramTab from './components/InstagramTab';
+import PostsReelsTab from './components/PostsReelsTab';
 import {
   dispatchCampaign,
   fetchWorkerHealth,
@@ -55,7 +57,7 @@ import {
 
 type ChannelType = 'all' | 'app' | 'whatsapp' | 'instagram' | 'facebook';
 type TicketStatus = 'open' | 'in_progress' | 'solved' | 'closed';
-type ActiveTab = 'dashboard' | 'instagram' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels';
+type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels';
 
 interface TicketMessage {
   senderId?: string;
@@ -709,6 +711,7 @@ export default function App() {
               [
                 { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
                 { id: 'instagram', label: 'Instagram', icon: Instagram },
+                { id: 'posts', label: 'Posts & Reels', icon: Film },
                 { id: 'omnibox', label: 'Unified Omnibox', icon: MessageSquare },
                 { id: 'jarvis', label: 'JARVIS Brain', icon: Bot },
                 { id: 'social', label: 'AI Social Auto-Pilot', icon: Share2 },
@@ -856,6 +859,8 @@ export default function App() {
       {activeTab === 'dashboard' && <DashboardTab />}
 
       {activeTab === 'instagram' && <InstagramTab />}
+
+      {activeTab === 'posts' && <PostsReelsTab />}
 
       {activeTab === 'omnibox' && (
         <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr 300px', flex: 1, minHeight: 0 }}>
