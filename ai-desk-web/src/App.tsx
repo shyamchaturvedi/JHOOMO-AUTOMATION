@@ -661,41 +661,50 @@ export default function App() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Top Navigation Bar */}
-      <header
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#090b0f' }}>
+      {/* Left Sidebar (AutoEnsta Style) */}
+      <aside
         style={{
-          height: 56,
-          padding: '0 18px',
-          borderBottom: '1px solid var(--border)',
-          background: 'rgba(17, 21, 31, 0.92)',
-          backdropFilter: 'blur(12px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          width: 232,
           flexShrink: 0,
+          background: '#0c0e14',
+          borderRight: '1px solid rgba(255,255,255,0.07)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          padding: '16px 12px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div>
+          {/* Brand Header */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '4px 8px 18px',
+            }}
+          >
             <div
               style={{
                 width: 30,
                 height: 30,
-                borderRadius: 9,
+                borderRadius: 8,
                 background: 'linear-gradient(135deg, #e11d48, #9333ea)',
                 display: 'grid',
                 placeItems: 'center',
+                flexShrink: 0,
               }}
             >
-              <Sparkles size={16} color="#fff" />
+              <Sparkles size={15} color="#fff" />
             </div>
-            <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: '-0.02em' }}>
-              JHOOMO <span style={{ color: '#fb7185' }}>AI DESK</span>
+            <span style={{ fontWeight: 800, fontSize: 15, letterSpacing: '-0.02em', color: '#fff' }}>
+              JHOOMO <span style={{ color: '#fb7185' }}>AI</span>
             </span>
           </div>
 
-          <nav style={{ display: 'flex', gap: 4 }}>
+          {/* Vertical Navigation */}
+          <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {(
               [
                 { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -717,63 +726,133 @@ export default function App() {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 7,
-                    padding: '7px 12px',
-                    borderRadius: 9,
-                    border: active ? '1px solid rgba(225,29,72,0.35)' : '1px solid transparent',
-                    background: active ? 'var(--primary-soft)' : 'transparent',
-                    color: active ? '#fff' : 'var(--text-muted)',
-                    fontSize: 12.5,
-                    fontWeight: 600,
+                    gap: 10,
+                    padding: '9px 12px',
+                    borderRadius: 10,
+                    border: active ? '1px solid rgba(99, 102, 241, 0.35)' : '1px solid transparent',
+                    background: active ? 'rgba(99, 102, 241, 0.14)' : 'transparent',
+                    color: active ? '#a5b4fc' : 'var(--text-muted)',
+                    fontSize: 13,
+                    fontWeight: active ? 600 : 500,
                     cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%',
                   }}
                 >
-                  <Icon size={14} />
-                  {tab.label}
+                  <Icon size={16} />
+                  <span>{tab.label}</span>
                 </button>
               );
             })}
           </nav>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '5px 10px',
-              borderRadius: 999,
-              background: 'rgba(16, 185, 129, 0.12)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#34d399',
-            }}
-          >
-            <Zap size={12} /> Gemini Flash Live
+        {/* User Profile Footer */}
+        <div
+          style={{
+            borderTop: '1px solid rgba(255,255,255,0.07)',
+            paddingTop: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #f59e0b, #ec4899)',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: 12,
+                fontWeight: 800,
+                color: '#fff',
+                flexShrink: 0,
+              }}
+            >
+              {(user.displayName || user.email || 'A')[0].toUpperCase()}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#fff',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {user.displayName || user.email?.split('@')[0] || 'Admin'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Admin</div>
+            </div>
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{user.email}</span>
+
           <button
             onClick={() => signOut(auth)}
             title="Sign Out"
             style={{
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border)',
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 8,
               color: 'var(--text-muted)',
-              padding: '6px 8px',
+              padding: '6px 7px',
               cursor: 'pointer',
               display: 'grid',
               placeItems: 'center',
+              flexShrink: 0,
             }}
           >
             <LogOut size={14} />
           </button>
         </div>
-      </header>
+      </aside>
 
-      {/* Main Content */}
+      {/* Right Side: Top Banner + Main Content */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        {/* Top Status / Trial Banner */}
+        <div
+          style={{
+            height: 38,
+            padding: '0 20px',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            background: '#0d1018',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 12,
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
+            <span>You have <strong style={{ color: '#fff' }}>7 days</strong> left in your free trial.</span>
+            <span style={{ color: '#818cf8', fontWeight: 600 }}>Upgrade to Premium →</span>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '3px 9px',
+              borderRadius: 999,
+              background: 'rgba(16, 185, 129, 0.12)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#34d399',
+            }}
+          >
+            <Zap size={11} /> Gemini Flash Live
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <main style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {activeTab === 'dashboard' && <DashboardTab />}
 
       {activeTab === 'instagram' && <InstagramTab />}
@@ -1892,6 +1971,8 @@ export default function App() {
           {toast}
         </div>
       )}
+        </main>
+      </div>
     </div>
   );
 }
