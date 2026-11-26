@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   User,
   onAuthStateChanged,
@@ -188,6 +188,7 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>(getTabFromPath);
   const [notifOpen, setNotifOpen] = useState(false);
+  const autoRepliedRef = useRef<Set<string>>(new Set());
 
   const navigateTab = (tab: ActiveTab) => {
     setActiveTab(tab);
@@ -357,6 +358,54 @@ export default function App() {
       return true;
     });
   }, [tickets, channelFilter, statusFilter, search]);
+
+  // Autonomous AI Auto-Reply for incoming open tickets when Automation Engine is ON
+  useEffect(() => {
+    const enabled = (() => {
+      try {
+        return localStorage.getItem('jhoomo_automation_enabled') !== 'false';
+      } catch {
+        return true;
+      }
+    })();
+    if (!enabled || tickets.length === 0) return;
+
+    tickets.forEach((t) => {
+      if (t.status !== 'open') return;
+      if (autoRepliedRef.current.has(t.id)) return;
+      const hasAdminReply = t.messages.some((m) => m.senderType === 'admin');
+      if (hasAdminReply) return;
+
+      autoRepliedRef.current.add(t.id);
+      const isEscalation = /refund|upi|payment|fraud|cancel|urgent/i.test(
+        `${t.subject} ${t.description}`
+      );
+
+      generateAiDraft({
+        channel: t.channel,
+        customerName: t.userName,
+        subject: t.subject,
+        message: t.description || t.messages[0]?.text || '',
+        tone: 'Helpful Hinglish',
+      })
+        .then(async (draft) => {
+          if (!draft) return;
+          await updateDoc(doc(db, 'support_tickets', t.id), {
+            messages: arrayUnion({
+              senderId: 'jhoomo-ai-autopilot',
+              senderType: 'admin',
+              text: draft,
+              createdAt: Timestamp.now(),
+            }),
+            status: isEscalation ? 'open' : 'in_progress',
+            updatedAt: serverTimestamp(),
+          });
+        })
+        .catch(() => {
+          autoRepliedRef.current.delete(t.id);
+        });
+    });
+  }, [tickets]);
 
   const selectedTicket = useMemo(
     () => tickets.find((t) => t.id === selectedId) || filteredTickets[0] || null,
