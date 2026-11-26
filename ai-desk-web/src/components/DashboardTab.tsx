@@ -11,32 +11,53 @@ import {
   Zap,
 } from 'lucide-react';
 import { fetchInstagramOverview, InstagramOverview } from '../lib/ai';
+import {
+  AutopilotConfig,
+  fetchAutopilotStatus,
+  runAutopilotNow,
+  useAutopilotConfig,
+} from '../lib/autopilot';
+
+const FEATURES: Array<{ key: Exclude<keyof AutopilotConfig, 'escalationKeywords'>; label: string; desc: string }> = [
+  { key: 'supportReplies', label: 'Support auto-replies', desc: 'App tickets & omnibox threads' },
+  { key: 'commentToDm', label: 'Comment → DM', desc: 'Instagram / Facebook comments' },
+  { key: 'emailAutoReply', label: 'Email auto-replies', desc: 'Inbound mail via Resend' },
+  { key: 'socialAutoPost', label: 'Social auto-post', desc: '10 AM & 7 PM IST' },
+];
 
 export default function DashboardTab() {
   const [igData, setIgData] = useState<InstagramOverview | null>(null);
-  const [automationEnabled, setAutomationEnabled] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('jhoomo_automation_enabled') !== 'false';
-    } catch {
-      return true;
-    }
-  });
+  const { config: autopilot, setFeature } = useAutopilotConfig();
+  const [lastRun, setLastRun] = useState<string>('Checking worker…');
+  const [running, setRunning] = useState(false);
+  const automationEnabled = autopilot.masterEnabled;
 
-  const toggleAutomation = () => {
-    setAutomationEnabled((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('jhoomo_automation_enabled', String(next));
-      } catch {}
-      return next;
-    });
-  };
+  const toggleAutomation = () => setFeature('masterEnabled', !automationEnabled);
 
   useEffect(() => {
     fetchInstagramOverview().then((res) => {
       if (res) setIgData(res);
     });
   }, []);
+
+  useEffect(() => {
+    fetchAutopilotStatus().then((status) => {
+      if (status?.lastRun?.ranAt) {
+        setLastRun(`Last run: ${String(status.lastRun.ranAt)}`);
+      } else if (status?.error) {
+        setLastRun(`Worker: ${status.error}`);
+      } else {
+        setLastRun('Worker not reachable yet');
+      }
+    });
+  }, [automationEnabled]);
+
+  const handleRunNow = async () => {
+    setRunning(true);
+    const result = await runAutopilotNow();
+    setLastRun(result ? `Last run: ${String(result.ranAt || new Date().toISOString())}` : 'Run failed');
+    setRunning(false);
+  };
 
   const username = igData?.profile?.username || 'jhoomo.events';
   const avatarUrl = igData?.profile?.profile_picture_url;
@@ -156,6 +177,69 @@ export default function DashboardTab() {
           </span>
           {automationEnabled ? 'TURN OFF' : 'TURN ON'}
         </button>
+      </div>
+
+      {/* Autopilot features */}
+      <div
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 14,
+          padding: '16px 20px',
+          marginBottom: 20,
+          display: 'grid',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800 }}>Autopilot tasks</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 3 }}>{lastRun}</div>
+          </div>
+          <button
+            onClick={handleRunNow}
+            disabled={running}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 9,
+              border: '1px solid var(--border)',
+              background: 'var(--bg)',
+              color: 'var(--text)',
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: running ? 'wait' : 'pointer',
+            }}
+          >
+            {running ? 'Running…' : 'Run now'}
+          </button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+          {FEATURES.map((feature) => {
+            const enabled = automationEnabled && autopilot[feature.key];
+            return (
+              <button
+                key={feature.key}
+                onClick={() => setFeature(feature.key, !autopilot[feature.key])}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  border: `1px solid ${enabled ? 'rgba(16,185,129,0.35)' : 'var(--border)'}`,
+                  background: enabled ? 'rgba(16,185,129,0.08)' : 'var(--bg)',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{feature.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: enabled ? '#34d399' : '#94a3b8' }}>
+                    {enabled ? 'ON' : 'OFF'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>{feature.desc}</div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Instagram Connection Status Card */}

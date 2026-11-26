@@ -2,10 +2,10 @@ name = "jhoomo-ai-desk-worker"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
-# Daily Auto-Post Schedule (UTC):
-# 04:30 UTC = 10:00 AM IST | 13:30 UTC = 07:00 PM IST
+# Autopilot heartbeat: every 5 minutes (support/email auto-replies).
+# Social auto-post is gated to 10:00 AM and 07:00 PM IST inside the worker.
 [triggers]
-crons = ["30 4 * * *", "30 13 * * *"]
+crons = ["*/5 * * * *"]
 
 [vars]
 ALLOWED_ORIGIN = "*"

@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { Plus, Trash2, Zap } from 'lucide-react';
+import { db } from '../lib/firebase';
 
 interface AutomationItem {
   id: string;
@@ -17,29 +19,65 @@ export default function AutomationsTab() {
   const [keyword, setKeyword] = useState('');
   const [replyText, setReplyText] = useState('');
 
+  useEffect(() => {
+    return onSnapshot(collection(db, 'comment_automations'), (snap) => {
+      setAutomations(
+        snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            name: data.name?.toString() || 'Automation',
+            keyword: data.keyword?.toString() || '',
+            replyText: data.replyText?.toString() || '',
+            active: data.active !== false,
+          };
+        })
+      );
+    });
+  }, []);
+
   const filtered = automations.filter((a) => {
     if (filter === 'active') return a.active;
     if (filter === 'inactive') return !a.active;
     return true;
   });
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !keyword.trim()) return;
-    setAutomations((prev) => [
-      {
-        id: `auto_${Date.now()}`,
-        name: name.trim(),
-        keyword: keyword.trim(),
-        replyText: replyText.trim() || 'Sent you a DM! Check your inbox.',
-        active: true,
-      },
-      ...prev,
-    ]);
+    const item = {
+      name: name.trim(),
+      keyword: keyword.trim(),
+      replyText: replyText.trim() || 'Sent you a DM! Check your inbox.',
+      active: true,
+    };
+    const localItem: AutomationItem = { id: `auto_${Date.now()}`, ...item };
+    setAutomations((prev) => [localItem, ...prev]);
+    try {
+      await addDoc(collection(db, 'comment_automations'), item);
+    } catch {
+      // keep the local item when Firestore is unavailable
+    }
     setName('');
     setKeyword('');
     setReplyText('');
     setCreating(false);
+  };
+
+  const toggleActive = (item: AutomationItem) => {
+    setAutomations((prev) =>
+      prev.map((a) => (a.id === item.id ? { ...a, active: !a.active } : a))
+    );
+    if (!item.id.startsWith('local_')) {
+      void updateDoc(doc(db, 'comment_automations', item.id), { active: !item.active });
+    }
+  };
+
+  const removeAutomation = (item: AutomationItem) => {
+    setAutomations((prev) => prev.filter((a) => a.id !== item.id));
+    if (!item.id.startsWith('local_')) {
+      void deleteDoc(doc(db, 'comment_automations', item.id));
+    }
   };
 
   return (
@@ -287,11 +325,7 @@ export default function AutomationsTab() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
-                  onClick={() =>
-                    setAutomations((prev) =>
-                      prev.map((a) => (a.id === item.id ? { ...a, active: !a.active } : a))
-                    )
-                  }
+                  onClick={() => toggleActive(item)}
                   style={{
                     padding: '5px 10px',
                     borderRadius: 999,
@@ -308,9 +342,7 @@ export default function AutomationsTab() {
                   {item.active ? 'ACTIVE' : 'INACTIVE'}
                 </button>
                 <button
-                  onClick={() =>
-                    setAutomations((prev) => prev.filter((a) => a.id !== item.id))
-                  }
+                  onClick={() => removeAutomation(item)}
                   style={{
                     padding: '6px 8px',
                     borderRadius: 8,

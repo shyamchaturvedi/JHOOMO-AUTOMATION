@@ -2,6 +2,7 @@ export interface Env {
   GEMINI_API_KEY: string;
   META_VERIFY_TOKEN: string;
   RESEND_API_KEY?: string;
+  RESEND_FROM?: string;
   FIREBASE_PROJECT_ID?: string;
   META_PAGE_TOKEN?: string;
   META_PAGE_ID?: string;
@@ -278,6 +279,396 @@ async function fetchFirestoreContext(projectId: string) {
   }
 }
 
+interface AutopilotConfig {
+  masterEnabled: boolean;
+  supportReplies: boolean;
+  commentToDm: boolean;
+  emailAutoReply: boolean;
+  socialAutoPost: boolean;
+  escalationKeywords: string[];
+}
+
+const DEFAULT_AUTOPILOT: AutopilotConfig = {
+  masterEnabled: true,
+  supportReplies: true,
+  commentToDm: true,
+  emailAutoReply: true,
+  socialAutoPost: true,
+  escalationKeywords: ['refund', 'upi', 'payment', 'fraud', 'cancel', 'urgent', 'legal'],
+};
+
+function firestoreBase(projectId: string) {
+  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+}
+
+function decodeValue(value: Record<string, unknown>): unknown {
+  if ('stringValue' in value) return value.stringValue;
+  if ('booleanValue' in value) return value.booleanValue;
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return Number(value.doubleValue);
+  if ('timestampValue' in value) return value.timestampValue;
+  if ('arrayValue' in value) {
+    const values = (value.arrayValue as { values?: unknown[] })?.values || [];
+    return values.map((item) => decodeValue(item as Record<string, unknown>));
+  }
+  if ('mapValue' in value) {
+    const fields = (value.mapValue as { fields?: Record<string, unknown> })?.fields || {};
+    return decodeFields(fields);
+  }
+  return undefined;
+}
+
+function decodeFields(fields: Record<string, unknown> = {}): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    output[key] = decodeValue(value as Record<string, unknown>);
+  }
+  return output;
+}
+
+function encodeValue(value: unknown): Record<string, unknown> {
+  if (value === null || value === undefined) return { nullValue: null };
+  if (typeof value === 'string') return { stringValue: value };
+  if (typeof value === 'boolean') return { booleanValue: value };
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
+  }
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(encodeValue) } };
+  if (typeof value === 'object') return { mapValue: { fields: encodeFields(value as Record<string, unknown>) } };
+  return { stringValue: String(value) };
+}
+
+function encodeFields(data: Record<string, unknown>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) fields[key] = encodeValue(value);
+  return fields;
+}
+
+async function getFirestoreDoc(projectId: string, path: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`${firestoreBase(projectId)}/${path}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { fields?: Record<string, unknown> };
+    return decodeFields(data.fields);
+  } catch {
+    return null;
+  }
+}
+
+async function setFirestoreDoc(
+  projectId: string,
+  path: string,
+  data: Record<string, unknown>
+): Promise<boolean> {
+  try {
+    const params = new URLSearchParams();
+    for (const key of Object.keys(data)) params.append('updateMask.fieldPaths', key);
+    const res = await fetch(`${firestoreBase(projectId)}/${path}?${params.toString()}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: encodeFields(data) }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function listFirestore(
+  projectId: string,
+  collectionName: string,
+  pageSize = 50
+): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+  try {
+    const res = await fetch(`${firestoreBase(projectId)}/${collectionName}?pageSize=${pageSize}`);
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      documents?: Array<{ name?: string; fields?: Record<string, unknown> }>;
+    };
+    return (data.documents || []).map((doc) => ({
+      id: doc.name?.split('/').pop() || '',
+      data: decodeFields(doc.fields),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function getAutopilotConfig(env: Env): Promise<AutopilotConfig> {
+  const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
+  const stored = await getFirestoreDoc(projectId, 'system_settings/autopilot');
+  if (!stored) return { ...DEFAULT_AUTOPILOT };
+  return {
+    masterEnabled:
+      typeof stored.masterEnabled === 'boolean' ? stored.masterEnabled : DEFAULT_AUTOPILOT.masterEnabled,
+    supportReplies:
+      typeof stored.supportReplies === 'boolean' ? stored.supportReplies : DEFAULT_AUTOPILOT.supportReplies,
+    commentToDm:
+      typeof stored.commentToDm === 'boolean' ? stored.commentToDm : DEFAULT_AUTOPILOT.commentToDm,
+    emailAutoReply:
+      typeof stored.emailAutoReply === 'boolean' ? stored.emailAutoReply : DEFAULT_AUTOPILOT.emailAutoReply,
+    socialAutoPost:
+      typeof stored.socialAutoPost === 'boolean' ? stored.socialAutoPost : DEFAULT_AUTOPILOT.socialAutoPost,
+    escalationKeywords: Array.isArray(stored.escalationKeywords)
+      ? (stored.escalationKeywords as string[])
+      : DEFAULT_AUTOPILOT.escalationKeywords,
+  };
+}
+
+async function eventFingerprint(input: string) {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(hash))
+    .slice(0, 16)
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function istNow() {
+  return new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+}
+
+function istDateKey(date: Date) {
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, '0'),
+    String(date.getUTCDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+async function autoReplySupportTickets(env: Env, config: AutopilotConfig) {
+  const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
+  const [appTickets, socialThreads] = await Promise.all([
+    listFirestore(projectId, 'support_tickets', 50),
+    listFirestore(projectId, 'omnibox_threads', 50),
+  ]);
+  const targets = [
+    ...appTickets.map((item) => ({ ...item, collectionName: 'support_tickets' })),
+    ...socialThreads.map((item) => ({ ...item, collectionName: 'omnibox_threads' })),
+  ];
+  const actions: Array<Record<string, unknown>> = [];
+
+  for (const target of targets) {
+    const ticket = target.data;
+    const status = String(ticket.status || 'open').toLowerCase();
+    if (status !== 'open' && status !== 'in_progress') continue;
+    if (ticket.aiAutoRepliedAt) continue;
+    const messages = Array.isArray(ticket.messages)
+      ? (ticket.messages as Array<Record<string, unknown>>)
+      : [];
+    if (messages.some((m) => m?.senderType === 'admin' || m?.senderType === 'agent')) continue;
+    const lastUserMessage = [...messages].reverse().find((m) => m?.senderType !== 'admin');
+    const message = String(lastUserMessage?.text || ticket.description || '').trim();
+    if (!message) continue;
+
+    const combined = `${String(ticket.subject || '')} ${message}`;
+    const escalation = config.escalationKeywords.some((keyword) =>
+      new RegExp(`\\b${keyword.replace(/[^a-z]/gi, '')}\\b`, 'i').test(combined)
+    );
+
+    let reply = '';
+    try {
+      reply = await callGemini(
+        env.GEMINI_API_KEY,
+        `Channel: ${String(ticket.channel || 'App Support')}\nCustomer: ${String(ticket.userName || 'Guest')}\nSubject: ${String(ticket.subject || 'General Query')}\nCustomer Message: "${message}"\nWrite the exact warm, concise reply ready to send. Do not invent booking IDs or approvals.`
+      );
+    } catch {
+      continue;
+    }
+    if (!reply) continue;
+    if (escalation) {
+      reply += '\n\nI have also flagged this to our JHOOMO support team for a quick human check.';
+    }
+
+    const nextMessages = [
+      ...messages,
+      {
+        senderId: 'jhoomo-ai-autopilot',
+        senderType: 'admin',
+        text: reply,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    const saved = await setFirestoreDoc(projectId, `${target.collectionName}/${target.id}`, {
+      messages: nextMessages,
+      status: 'in_progress',
+      aiAutoRepliedAt: new Date().toISOString(),
+      handledBy: 'jarvis-autopilot',
+      needsHuman: escalation,
+      updatedAt: new Date().toISOString(),
+    });
+
+    if (saved && target.collectionName === 'support_tickets') {
+      await setFirestoreDoc(projectId, `supportTickets/${target.id}`, {
+        messages: nextMessages,
+        status: 'in_progress',
+        aiAutoRepliedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    if (saved && escalation) {
+      await setFirestoreDoc(projectId, `admin_alerts/${target.id}`, {
+        type: 'human_review_needed',
+        channel: String(ticket.channel || 'app'),
+        ticketId: target.id,
+        subject: String(ticket.subject || 'Support query'),
+        customer: String(ticket.userName || 'Guest'),
+        reason: combined.slice(0, 500),
+        status: 'open',
+        createdAt: new Date().toISOString(),
+      });
+    }
+    actions.push({
+      type: 'support_auto_reply',
+      id: target.id,
+      channel: String(ticket.channel || 'app'),
+      escalation,
+      sent: saved,
+    });
+  }
+  return actions;
+}
+
+async function autoReplyInboundEmails(
+  env: Env,
+  config: AutopilotConfig,
+  provided?: Array<{ id: string; data: Record<string, unknown> }>
+) {
+  const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
+  const emails = provided || (await listFirestore(projectId, 'inbound_emails', 30));
+  const actions: Array<Record<string, unknown>> = [];
+  if (!env.RESEND_API_KEY) {
+    return [{ type: 'email_auto_reply', sent: false, reason: 'RESEND_API_KEY not configured' }];
+  }
+
+  for (const item of emails) {
+    const mail = item.data;
+    if (mail.aiAutoRepliedAt || String(mail.status || 'unread') === 'replied') continue;
+    if (mail.lastAttemptAt && Date.now() - Date.parse(String(mail.lastAttemptAt)) < 10 * 60 * 1000) {
+      continue;
+    }
+    const to = String(mail.from || '').trim();
+    if (!to || !to.includes('@')) continue;
+    const subject = String(mail.subject || '(No Subject)');
+    const body = String(mail.body || '').slice(0, 6000);
+
+    let reply = '';
+    try {
+      reply = await callGemini(
+        env.GEMINI_API_KEY,
+        `Channel: Email\nSubject: ${subject}\nCustomer: ${to}\nMessage: "${body}"\nWrite the exact warm, concise support reply ready to send. Do not invent booking IDs or approvals.`
+      );
+    } catch {
+      continue;
+    }
+    if (!reply) continue;
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: env.RESEND_FROM || 'JHOOMO <support@jhoomo.in>',
+        to: [to],
+        subject: `Re: ${subject}`,
+        html: reply
+          .split('\n\n')
+          .map((p) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">${p.replace(/\n/g, '<br/>')}</p>`)
+          .join(''),
+      }),
+    });
+    const sent = res.ok;
+    await setFirestoreDoc(projectId, `inbound_emails/${item.id}`, {
+      status: sent ? 'replied' : 'unread',
+      aiAutoRepliedAt: sent ? new Date().toISOString() : '',
+      aiReply: reply,
+      handledBy: 'jarvis-autopilot',
+      lastAttemptAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    actions.push({ type: 'email_auto_reply', id: item.id, to, sent, status: res.status });
+  }
+  return actions;
+}
+
+async function maybeAutoSocialPost(env: Env, config: AutopilotConfig) {
+  if (!config.socialAutoPost) return null;
+  const now = istNow();
+  const hour = now.getUTCHours();
+  const minute = now.getUTCMinutes();
+  const inWindow = (hour === 10 || hour === 19) && minute < 40;
+  if (!inWindow) return null;
+
+  const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
+  const today = istDateKey(now);
+  const state = await getFirestoreDoc(projectId, 'autopilot_state/daily_social_post');
+  if (state?.lastDate === today) return null;
+
+  let result: Record<string, unknown>;
+  try {
+    result = await runJarvisBrain(env, true);
+  } catch (err) {
+    return { type: 'social_auto_post', published: false, error: (err as Error).message };
+  }
+  const strategy = (result.strategy || {}) as Record<string, unknown>;
+  const event = (result.event || {}) as Record<string, unknown>;
+  const hashtags = Array.isArray(strategy.hashtags) ? (strategy.hashtags as string[]) : ['#JHOOMO'];
+  const saved = await setFirestoreDoc(projectId, `social_autoposts/auto_${Date.now()}`, {
+    eventTitle: String(event.title || 'JHOOMO Live Event'),
+    city: String(event.city || 'India'),
+    platform: 'Instagram & Facebook',
+    caption: String(strategy.caption || ''),
+    hashtags,
+    imageUrl: String(event.imageUrl || ''),
+    scheduledFor: now.toISOString(),
+    status: 'published',
+    likes: 0,
+    comments: 0,
+    views: 0,
+    source: 'jarvis-autopilot',
+    createdAt: new Date().toISOString(),
+  });
+  await setFirestoreDoc(projectId, 'autopilot_state/daily_social_post', { lastDate: today, ranAt: new Date().toISOString() });
+  return {
+    type: 'social_auto_post',
+    published: true,
+    saved,
+    publishResults: result.publishResults || null,
+    scheduledForIST: `${hour}:${String(minute).padStart(2, '0')} IST`,
+  };
+}
+
+async function runAutopilotCycle(env: Env, allowPublish = false) {
+  const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
+  const config = await getAutopilotConfig(env);
+  const ranAt = new Date().toISOString();
+  if (!config.masterEnabled) {
+    return { ok: true, skipped: true, reason: 'Automation Engine is OFF', actions: [], config, ranAt };
+  }
+
+  const actions: Array<unknown> = [];
+  if (config.supportReplies) {
+    actions.push(...(await autoReplySupportTickets(env, config)));
+  }
+  if (config.emailAutoReply) {
+    actions.push(...(await autoReplyInboundEmails(env, config)));
+  }
+  if (allowPublish) {
+    const social = await maybeAutoSocialPost(env, config);
+    if (social) actions.push(social);
+  }
+
+  const summary = { ok: true, skipped: false, actions, count: actions.length, config, ranAt };
+  await setFirestoreDoc(projectId, 'autopilot_state/last_run', {
+    ranAt,
+    actionCount: actions.length,
+    summary: JSON.stringify(actions).slice(0, 8000),
+    engine: 'jarvis-autopilot',
+  });
+  return summary;
+}
+
 async function runJarvisBrain(env: Env, autoPublish = false) {
   const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
   const [{ events, demandQueries }, insights] = await Promise.all([
@@ -356,24 +747,28 @@ export default {
     const bodyMatch = rawText.split(/\r?\n\r?\n/).slice(1).join('\n\n').trim();
     const subject = message.headers.get('subject') || '(No Subject)';
     const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
-    const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/inbound_emails`;
+    const mailId = await eventFingerprint(
+      `${message.from}:${subject}:${message.headers.get('message-id') || bodyMatch.slice(0, 200)}`
+    );
+    const mailData: Record<string, unknown> = {
+      to: message.to,
+      from: message.from,
+      fromName: message.from,
+      subject,
+      body: bodyMatch.slice(0, 12000),
+      status: 'unread',
+      receivedAt: new Date().toISOString(),
+    };
+    const storePromise = setFirestoreDoc(projectId, `inbound_emails/${mailId}`, mailData);
 
     ctx.waitUntil(
-      fetch(firestoreUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fields: {
-            to: { stringValue: message.to },
-            from: { stringValue: message.from },
-            fromName: { stringValue: message.from },
-            subject: { stringValue: subject },
-            body: { stringValue: bodyMatch.slice(0, 12000) },
-            status: { stringValue: 'unread' },
-            receivedAt: { timestampValue: new Date().toISOString() },
-          },
-        }),
-      }).catch(() => undefined)
+      (async () => {
+        await storePromise;
+        const config = await getAutopilotConfig(env);
+        if (config.masterEnabled && config.emailAutoReply) {
+          await autoReplyInboundEmails(env, config, [{ id: mailId, data: mailData }]);
+        }
+      })()
     );
 
     const forwardMap: Record<string, string> = {
@@ -390,7 +785,7 @@ export default {
   },
 
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runJarvisBrain(env, true));
+    ctx.waitUntil(runAutopilotCycle(env, true));
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -406,17 +801,68 @@ export default {
         {
           ok: true,
           service: 'jhoomo-jarvis-worker',
-          cron: ['10:00 AM IST', '07:00 PM IST'],
+          cron: ['every 5 minutes', '10:00 AM IST', '07:00 PM IST'],
           channels: {
             gemini: Boolean(env.GEMINI_API_KEY),
             whatsapp: Boolean(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_ID),
             facebook: Boolean(env.META_PAGE_TOKEN && env.META_PAGE_ID),
             instagram: Boolean(env.META_PAGE_TOKEN && env.IG_USER_ID),
+            email: Boolean(env.RESEND_API_KEY),
           },
+          autopilot: await getAutopilotConfig(env),
         },
         200,
         origin
       );
+    }
+
+    if (url.pathname === '/api/autopilot/status' && request.method === 'GET') {
+      try {
+        const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
+        const config = await getAutopilotConfig(env);
+        const lastRun = await getFirestoreDoc(projectId, 'autopilot_state/last_run');
+        return json({ ok: true, config, lastRun }, 200, origin);
+      } catch (err) {
+        return json({ error: (err as Error).message }, 500, origin);
+      }
+    }
+
+    if (url.pathname === '/api/autopilot/config' && request.method === 'POST') {
+      try {
+        const body = (await request.json()) as Partial<AutopilotConfig>;
+        const current = await getAutopilotConfig(env);
+        const config: AutopilotConfig = {
+          masterEnabled:
+            typeof body.masterEnabled === 'boolean' ? body.masterEnabled : current.masterEnabled,
+          supportReplies:
+            typeof body.supportReplies === 'boolean' ? body.supportReplies : current.supportReplies,
+          commentToDm: typeof body.commentToDm === 'boolean' ? body.commentToDm : current.commentToDm,
+          emailAutoReply:
+            typeof body.emailAutoReply === 'boolean' ? body.emailAutoReply : current.emailAutoReply,
+          socialAutoPost:
+            typeof body.socialAutoPost === 'boolean' ? body.socialAutoPost : current.socialAutoPost,
+          escalationKeywords: Array.isArray(body.escalationKeywords)
+            ? body.escalationKeywords
+            : current.escalationKeywords,
+        };
+        const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
+        const saved = await setFirestoreDoc(projectId, 'system_settings/autopilot', {
+          ...config,
+          updatedAt: new Date().toISOString(),
+        });
+        return json({ ok: saved, config }, saved ? 200 : 500, origin);
+      } catch (err) {
+        return json({ error: (err as Error).message }, 500, origin);
+      }
+    }
+
+    if (url.pathname === '/api/autopilot/run' && request.method === 'POST') {
+      try {
+        const result = await runAutopilotCycle(env, true);
+        return json(result, 200, origin);
+      } catch (err) {
+        return json({ error: (err as Error).message }, 500, origin);
+      }
     }
 
     // 1. Cross-Channel Identity & Confusion Resolver + AI Draft
@@ -692,63 +1138,124 @@ Return JSON only with keys: caption, hashtags (array of strings), commentAutoRep
         };
 
         const projectId = env.FIREBASE_PROJECT_ID || 'milo-da65c';
+        const config = await getAutopilotConfig(env);
+        if (!config.masterEnabled) {
+          return json({ received: true, skipped: true, reason: 'Automation Engine is OFF', actions: [] }, 200, origin);
+        }
         const { demandQueries } = await fetchFirestoreContext(projectId);
+        const customAutomations = config.commentToDm
+          ? (await listFirestore(projectId, 'comment_automations', 50)).filter((a) => a.data.active !== false)
+          : [];
         const actions: Array<unknown> = [];
 
         for (const entry of payload.entry || []) {
           for (const change of entry.changes || []) {
             for (const msg of change.value?.messages || []) {
-              if (msg.from && msg.text?.body) {
-                const norm = normalizePhone(msg.from);
-                const matches = demandQueries.filter((q) => q.userPhone === norm);
-                const crossNote =
-                  matches.length > 0
-                    ? `User also has open App Support ticket(s): ${matches.map((m) => m.subject).join(', ')}. Acknowledge so there is no confusion.`
-                    : '';
-                const aiReply = await callGemini(
+              if (!msg.from || !msg.text?.body || !config.supportReplies) continue;
+              const fingerprint = await eventFingerprint(`wa:${msg.from}:${msg.text.body}`);
+              const seen = await getFirestoreDoc(projectId, `webhook_events/${fingerprint}`);
+              if (seen?.processedAt) continue;
+              await setFirestoreDoc(projectId, `webhook_events/${fingerprint}`, {
+                type: 'whatsapp_auto_reply',
+                processedAt: new Date().toISOString(),
+              });
+
+              const norm = normalizePhone(msg.from);
+              const matches = demandQueries.filter((q) => q.userPhone === norm);
+              const crossNote =
+                matches.length > 0
+                  ? `User also has open App Support ticket(s): ${matches.map((m) => m.subject).join(', ')}. Acknowledge so there is no confusion.`
+                  : '';
+              let aiReply = '';
+              try {
+                aiReply = await callGemini(
                   env.GEMINI_API_KEY,
                   `Channel: WhatsApp\n${crossNote}\nCustomer Message: "${msg.text.body}"\nReply concisely:`
                 );
-                const sent = await sendWhatsAppMessage(env, msg.from, aiReply);
-                actions.push({ type: 'whatsapp_auto_reply', to: msg.from, crossMatched: matches.length > 0, aiReply, sent });
+              } catch {
+                continue;
               }
+              if (!aiReply) continue;
+              const sent = await sendWhatsAppMessage(env, msg.from, aiReply);
+              await setFirestoreDoc(projectId, `omnibox_threads/wa_${fingerprint.slice(0, 16)}`, {
+                channel: 'whatsapp',
+                userName: `+${norm}`,
+                userPhone: norm,
+                subject: 'WhatsApp Inquiry',
+                description: msg.text.body,
+                status: 'in_progress',
+                handledBy: 'jarvis-autopilot',
+                aiAutoRepliedAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+                messages: [
+                  { senderId: norm, senderType: 'user', text: msg.text.body, createdAt: new Date().toISOString() },
+                  { senderId: 'jhoomo-ai-autopilot', senderType: 'admin', text: aiReply, createdAt: new Date().toISOString() },
+                ],
+              });
+              actions.push({ type: 'whatsapp_auto_reply', to: msg.from, crossMatched: matches.length > 0, aiReply, sent });
             }
-            if (change.value?.comment_id && change.value?.text) {
-              const lowerComment = change.value.text.toLowerCase();
-              const matchedKeyword = COMMENT_DM_KEYWORDS.find((kw) => lowerComment.includes(kw));
+            if (!change.value?.comment_id || !change.value?.text || !config.commentToDm) continue;
+            const fingerprint = await eventFingerprint(`cm:${change.value.comment_id}:${change.value.text}`);
+            const seen = await getFirestoreDoc(projectId, `webhook_events/${fingerprint}`);
+            if (seen?.processedAt) continue;
+            await setFirestoreDoc(projectId, `webhook_events/${fingerprint}`, {
+              type: 'comment_auto_reply',
+              processedAt: new Date().toISOString(),
+            });
 
-              if (matchedKeyword) {
-                const publicReply = 'Check your DM! Humne booking link & pass details bhej di hain.';
-                const dmText = await callGemini(
-                  env.GEMINI_API_KEY,
-                  `User commented "${change.value.text}" on Instagram/Facebook (keyword: ${matchedKeyword}). Write a warm 2-line DM with direct booking link https://jhoomo.in and remind them M-Tickets use live QR inside the JHOOMO app.`
-                );
-                const [commentRes, dmRes] = await Promise.all([
-                  likeAndReplyMetaComment(env, change.value.comment_id, publicReply),
-                  sendInstagramCommentDM(env, change.value.comment_id, dmText),
-                ]);
-                actions.push({
-                  type: 'comment_to_dm_triggered',
-                  keyword: matchedKeyword,
-                  commentId: change.value.comment_id,
-                  publicReply,
-                  dmText,
-                  ...commentRes,
-                  ...dmRes,
-                });
-              } else {
-                const aiReply = await callGemini(
+            const lowerComment = change.value.text.toLowerCase();
+            const customMatch = customAutomations.find((a) => {
+              const keyword = String(a.data.keyword || '').toLowerCase();
+              return keyword.length > 0 && lowerComment.includes(keyword);
+            });
+            const matchedKeyword = customMatch
+              ? String(customMatch.data.keyword || '')
+              : COMMENT_DM_KEYWORDS.find((kw) => lowerComment.includes(kw));
+
+            if (matchedKeyword) {
+              const publicReply = 'Check your DM! Humne booking link & pass details bhej di hain.';
+              let dmText = customMatch ? String(customMatch.data.replyText || '') : '';
+              if (!dmText) {
+                try {
+                  dmText = await callGemini(
+                    env.GEMINI_API_KEY,
+                    `User commented "${change.value.text}" on Instagram/Facebook (keyword: ${matchedKeyword}). Write a warm 2-line DM with direct booking link https://jhoomo.in and remind them M-Tickets use live QR inside the JHOOMO app.`
+                  );
+                } catch {
+                  continue;
+                }
+              }
+              const [commentRes, dmRes] = await Promise.all([
+                likeAndReplyMetaComment(env, change.value.comment_id, publicReply),
+                sendInstagramCommentDM(env, change.value.comment_id, dmText),
+              ]);
+              actions.push({
+                type: 'comment_to_dm_triggered',
+                keyword: matchedKeyword,
+                commentId: change.value.comment_id,
+                publicReply,
+                dmText,
+                ...commentRes,
+                ...dmRes,
+              });
+            } else {
+              let aiReply = '';
+              try {
+                aiReply = await callGemini(
                   env.GEMINI_API_KEY,
                   `Channel: ${payload.object || 'Instagram'} Comment\nComment: "${change.value.text}"\nReply warmly in 1-2 short sentences:`
                 );
-                const res = await likeAndReplyMetaComment(env, change.value.comment_id, aiReply);
-                actions.push({
-                  type: 'comment_like_and_reply',
-                  commentId: change.value.comment_id,
-                  aiReply,
-                  ...res,
-                });
+              } catch {
+                continue;
               }
+              if (!aiReply) continue;
+              const res = await likeAndReplyMetaComment(env, change.value.comment_id, aiReply);
+              actions.push({
+                type: 'comment_like_and_reply',
+                commentId: change.value.comment_id,
+                aiReply,
+                ...res,
+              });
             }
           }
         }

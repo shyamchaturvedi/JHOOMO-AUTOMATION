@@ -65,6 +65,7 @@ import {
   runJarvisStrategy,
   triggerDailyAutoPost,
 } from './lib/ai';
+import { useAutopilotConfig } from './lib/autopilot';
 
 type ChannelType = 'all' | 'app' | 'whatsapp' | 'instagram' | 'facebook';
 type TicketStatus = 'open' | 'in_progress' | 'solved' | 'closed';
@@ -111,6 +112,7 @@ interface SupportTicket {
   bookingId?: string;
   priority?: string;
   status: TicketStatus;
+  aiAutoRepliedAt?: unknown;
   createdAtMs: number;
   createdAtLabel: string;
   messages: TicketMessage[];
@@ -188,6 +190,7 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>(getTabFromPath);
   const [notifOpen, setNotifOpen] = useState(false);
+  const { config: autopilot } = useAutopilotConfig();
   const autoRepliedRef = useRef<Set<string>>(new Set());
 
   const navigateTab = (tab: ActiveTab) => {
@@ -293,6 +296,7 @@ export default function App() {
         bookingId: data.bookingId?.toString() || '',
         priority: data.priority?.toString() || 'normal',
         status: normalizeStatus(data.status?.toString()),
+        aiAutoRepliedAt: data.aiAutoRepliedAt,
         createdAtMs: t.ms,
         createdAtLabel: t.label,
         messages: msgs,
@@ -359,26 +363,21 @@ export default function App() {
     });
   }, [tickets, channelFilter, statusFilter, search]);
 
-  // Autonomous AI Auto-Reply for incoming open tickets when Automation Engine is ON
+  // Instant autopilot reply in the open dashboard; worker cron handles everything else.
   useEffect(() => {
-    const enabled = (() => {
-      try {
-        return localStorage.getItem('jhoomo_automation_enabled') !== 'false';
-      } catch {
-        return true;
-      }
-    })();
-    if (!enabled || tickets.length === 0) return;
+    if (!autopilot.masterEnabled || !autopilot.supportReplies || tickets.length === 0) return;
 
     tickets.forEach((t) => {
-      if (t.status !== 'open') return;
+      if (t.status !== 'open' || t.aiAutoRepliedAt) return;
       if (autoRepliedRef.current.has(t.id)) return;
       const hasAdminReply = t.messages.some((m) => m.senderType === 'admin');
       if (hasAdminReply) return;
 
       autoRepliedRef.current.add(t.id);
-      const isEscalation = /refund|upi|payment|fraud|cancel|urgent/i.test(
-        `${t.subject} ${t.description}`
+      const isEscalation = autopilot.escalationKeywords.some((keyword) =>
+        new RegExp(`\\b${keyword.replace(/[^a-z]/gi, '')}\\b`, 'i').test(
+          `${t.subject} ${t.description}`
+        )
       );
 
       generateAiDraft({
@@ -390,22 +389,33 @@ export default function App() {
       })
         .then(async (draft) => {
           if (!draft) return;
-          await updateDoc(doc(db, 'support_tickets', t.id), {
+          const targetCol = t.channel === 'app' ? 'support_tickets' : 'omnibox_threads';
+          const finalReply = isEscalation
+            ? `${draft}\n\nMaine ye request JHOOMO support team ko bhi flag kar diya hai.`
+            : draft;
+          const payload = {
             messages: arrayUnion({
               senderId: 'jhoomo-ai-autopilot',
               senderType: 'admin',
-              text: draft,
+              text: finalReply,
               createdAt: Timestamp.now(),
             }),
-            status: isEscalation ? 'open' : 'in_progress',
+            status: 'in_progress' as TicketStatus,
+            aiAutoRepliedAt: Timestamp.now(),
+            handledBy: 'jarvis-autopilot',
+            needsHuman: isEscalation,
             updatedAt: serverTimestamp(),
-          });
+          };
+          await updateDoc(doc(db, targetCol, t.id), payload);
+          if (t.channel === 'app') {
+            await setDoc(doc(db, 'supportTickets', t.id), payload, { merge: true });
+          }
         })
         .catch(() => {
           autoRepliedRef.current.delete(t.id);
         });
     });
-  }, [tickets]);
+  }, [tickets, autopilot]);
 
   const selectedTicket = useMemo(
     () => tickets.find((t) => t.id === selectedId) || filteredTickets[0] || null,
