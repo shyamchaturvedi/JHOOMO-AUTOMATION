@@ -49,7 +49,6 @@ import InstagramTab from './components/InstagramTab';
 import PostsReelsTab from './components/PostsReelsTab';
 import AutomationsTab from './components/AutomationsTab';
 import LinkInBioTab from './components/LinkInBioTab';
-import BillingTab from './components/BillingTab';
 import SettingsTab from './components/SettingsTab';
 import {
   dispatchCampaign,
@@ -64,7 +63,7 @@ import {
 
 type ChannelType = 'all' | 'app' | 'whatsapp' | 'instagram' | 'facebook';
 type TicketStatus = 'open' | 'in_progress' | 'solved' | 'closed';
-type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'automations' | 'link-in-bio' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels' | 'billing' | 'settings';
+type ActiveTab = 'dashboard' | 'instagram' | 'posts' | 'automations' | 'link-in-bio' | 'omnibox' | 'jarvis' | 'social' | 'campaigns' | 'forms' | 'channels' | 'settings';
 
 const VALID_TABS: ActiveTab[] = [
   'dashboard',
@@ -78,7 +77,6 @@ const VALID_TABS: ActiveTab[] = [
   'campaigns',
   'forms',
   'channels',
-  'billing',
   'settings',
 ];
 
@@ -762,7 +760,6 @@ export default function App() {
                 { id: 'campaigns', label: 'SMS & WA Campaigns', icon: Send },
                 { id: 'forms', label: 'Lead Forms', icon: FileText },
                 { id: 'channels', label: 'Channels & Webhooks', icon: Radio },
-                { id: 'billing', label: 'Billing', icon: CreditCard },
                 { id: 'settings', label: 'Settings', icon: Settings },
               ] as const
             ).map((tab) => {
@@ -878,8 +875,7 @@ export default function App() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
-            <span>You have <strong style={{ color: '#fff' }}>7 days</strong> left in your free trial.</span>
-            <span style={{ color: '#818cf8', fontWeight: 600 }}>Upgrade to Premium →</span>
+            <span>JHOOMO AI DESK • Automation &amp; Support</span>
           </div>
 
           <div
@@ -1905,8 +1901,6 @@ export default function App() {
       )}
 
       {activeTab === 'forms' && <LeadFormsTab />}
-
-      {activeTab === 'billing' && <BillingTab />}
 
       {activeTab === 'settings' && <SettingsTab />}
 
